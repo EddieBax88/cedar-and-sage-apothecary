@@ -1,0 +1,14 @@
+{
+  "name": "cedar-and-sage-apothecary",
+  "version": "1.0.0",
+  "description": "Cedar and Sage Studios: Apothecary Line. Premium, nature-inspired loungewear.",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.42.0"
+  }
+}
