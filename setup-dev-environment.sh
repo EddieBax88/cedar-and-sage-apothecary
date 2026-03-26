@@ -161,7 +161,7 @@ install_webos_cli() {
     fi
 
     info "Installing @webos-tools/cli via npm..."
-    run "npm install -g @webos-tools/cli@latest"
+    run "$SUDO npm install -g @webos-tools/cli@latest"
 
     info "Setting profile to TV mode..."
     run "ares-config --profile tv 2>/dev/null || true"
@@ -229,7 +229,7 @@ install_claude_code() {
     fi
 
     info "Installing @anthropic-ai/claude-code@latest via npm..."
-    run "npm install -g @anthropic-ai/claude-code@latest"
+    run "$SUDO npm install -g @anthropic-ai/claude-code@latest"
 
     if command -v claude &>/dev/null; then
         success "Claude Code installed: $(claude --version 2>/dev/null || echo 'installed')"
