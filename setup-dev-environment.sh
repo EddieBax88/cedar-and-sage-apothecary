@@ -3,13 +3,16 @@
 # setup-dev-environment.sh
 # Cedar and Sage Studios - Development Environment Setup
 #
-# Installs: Homebrew, LG webOS TV CLI, VS Code, Claude Code
-# Tested on: Ubuntu 24.04 LTS (x86_64), Chromebook Crostini (Debian/Ubuntu)
+# Installs:
+#   1. webOS CLI tools + Homebrew Channel on LG TV
+#   2. VS Code
+#   3. Claude Code
+#
+# Tested on: Chromebook Crostini (Debian 12), Ubuntu 24.04 LTS
 #
 # Usage:
 #   ./setup-dev-environment.sh              # Run full setup
-#   ./setup-dev-environment.sh --dry-run    # Preview commands without executing
-#   ./setup-dev-environment.sh --step N     # Run only step N (1-4)
+#   ./setup-dev-environment.sh --step N     # Run only step N (1-3)
 
 set -euo pipefail
 
@@ -20,39 +23,25 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-DRY_RUN=false
-STEP_ONLY=""
+NC='\033[0m'
 
 info()    { echo -e "${BLUE}[INFO]${NC} $*"; }
 success() { echo -e "${GREEN}[OK]${NC} $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
 fail()    { echo -e "${RED}[ERROR]${NC} $*"; }
 
-run() {
-    if $DRY_RUN; then
-        echo -e "${YELLOW}[DRY-RUN]${NC} $*"
-    else
-        eval "$@"
-    fi
-}
+STEP_ONLY=""
 
-# ---------------------------------------------------------------------------
-# Parse arguments
-# ---------------------------------------------------------------------------
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --dry-run) DRY_RUN=true; shift ;;
         --step)    STEP_ONLY="$2"; shift 2 ;;
         -h|--help)
-            echo "Usage: $0 [--dry-run] [--step N] [-h|--help]"
+            echo "Usage: $0 [--step N] [-h|--help]"
             echo ""
             echo "Steps:"
-            echo "  1  Install Homebrew (Linuxbrew)"
-            echo "  2  Install LG webOS TV CLI (@webos-tools/cli)"
-            echo "  3  Install VS Code"
-            echo "  4  Install Claude Code (@anthropic-ai/claude-code)"
+            echo "  1  Install webOS CLI + Homebrew Channel on LG TV"
+            echo "  2  Install VS Code"
+            echo "  3  Install Claude Code"
             exit 0
             ;;
         *) fail "Unknown option: $1"; exit 1 ;;
@@ -64,7 +53,7 @@ should_run() {
 }
 
 # ---------------------------------------------------------------------------
-# Pre-flight checks
+# Pre-flight
 # ---------------------------------------------------------------------------
 echo ""
 echo "=============================================="
@@ -78,18 +67,12 @@ info "Node: $(node --version 2>/dev/null || echo 'not found')"
 info "npm: $(npm --version 2>/dev/null || echo 'not found')"
 echo ""
 
-if $DRY_RUN; then
-    warn "DRY-RUN mode enabled - no changes will be made"
-    echo ""
-fi
-
-# Detect if running as root or need sudo
+# Detect sudo
 if [[ "$(id -u)" -eq 0 ]]; then
     SUDO=""
 else
     SUDO="sudo"
     info "Running as user '$(whoami)' - will use sudo for system commands"
-    # Verify sudo works before proceeding
     if ! $SUDO -v 2>/dev/null; then
         fail "sudo access required. Run: sudo passwd \$(whoami) to set a password first."
         exit 1
@@ -97,100 +80,116 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 1: Homebrew (Linuxbrew)
+# Step 1: webOS CLI + Homebrew Channel on LG TV
 # ---------------------------------------------------------------------------
-install_homebrew() {
+install_homebrew_channel() {
     echo "----------------------------------------------"
-    info "Step 1/4: Installing Homebrew (Linuxbrew)"
-    echo "----------------------------------------------"
-
-    if command -v brew &>/dev/null; then
-        success "Homebrew is already installed: $(brew --version | head -1)"
-        info "Updating Homebrew..."
-        run "brew update"
-        return
-    fi
-
-    info "Installing prerequisites..."
-    run "$SUDO apt-get update -qq && $SUDO apt-get install -y -qq build-essential procps curl file git"
-
-    info "Running Homebrew installer (non-interactive)..."
-    run "NONINTERACTIVE=1 /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-
-    # Add to PATH
-    if [[ -d /home/linuxbrew/.linuxbrew ]]; then
-        eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-
-        # Persist to shell profiles
-        SHELLENV_LINE='eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"'
-        for rc_file in "$HOME/.bashrc" "$HOME/.profile"; do
-            if ! grep -qF "linuxbrew" "$rc_file" 2>/dev/null; then
-                run "echo '$SHELLENV_LINE' >> $rc_file"
-            fi
-        done
-    fi
-
-    if command -v brew &>/dev/null; then
-        success "Homebrew installed: $(brew --version | head -1)"
-    else
-        fail "Homebrew installation could not be verified"
-    fi
-}
-
-# ---------------------------------------------------------------------------
-# Step 2: LG webOS TV CLI
-# ---------------------------------------------------------------------------
-install_webos_cli() {
-    echo ""
-    echo "----------------------------------------------"
-    info "Step 2/4: Installing LG webOS TV CLI"
+    info "Step 1/3: LG TV Homebrew Channel Setup"
     echo "----------------------------------------------"
 
+    # 1a: Ensure Node.js is available
     if ! command -v node &>/dev/null; then
-        warn "Node.js is required but not found. Attempting to install via apt..."
-        run "$SUDO apt-get update -qq && $SUDO apt-get install -y -qq nodejs npm"
+        warn "Node.js not found. Installing via apt..."
+        $SUDO apt-get update -qq && $SUDO apt-get install -y -qq nodejs npm
         if ! command -v node &>/dev/null; then
-            fail "Node.js installation failed. Install Node.js manually, then re-run."
+            fail "Node.js installation failed."
             return 1
         fi
     fi
+    success "Node.js $(node --version)"
 
-    if command -v ares &>/dev/null; then
-        success "webOS CLI is already installed: $(ares --version 2>/dev/null || echo 'version unknown')"
-        info "Updating to latest version..."
-    fi
-
-    info "Installing @webos-tools/cli via npm..."
-    run "$SUDO npm install -g @webos-tools/cli@latest"
-
-    info "Setting profile to TV mode..."
-    run "ares-config --profile tv 2>/dev/null || true"
-
-    if command -v ares &>/dev/null; then
-        success "webOS TV CLI installed"
+    # 1b: Install webOS CLI tools
+    if command -v ares-install &>/dev/null; then
+        success "webOS CLI already installed"
     else
-        fail "webOS CLI installation could not be verified"
+        info "Installing webOS CLI tools (@webos-tools/cli)..."
+        $SUDO npm install -g @webos-tools/cli@latest
     fi
 
+    if command -v ares-install &>/dev/null; then
+        success "webOS CLI ready"
+    else
+        fail "webOS CLI install failed"
+        return 1
+    fi
+
+    # 1c: Set up TV device
     echo ""
-    warn "=== LG TV Setup (manual steps required) ==="
-    echo "  1. Register at: https://webostv.developer.lge.com"
-    echo "  2. On your LG TV: Install 'Developer Mode' app from LG Content Store"
-    echo "  3. Enable Dev Mode on TV, note the IP address and passphrase"
-    echo "  4. Pair with TV:  ares-setup-device"
-    echo "  5. Install key:   ares-novacom --device <name> --getkey"
-    echo "  6. Test:          ares-install --device <name> --list"
+    info "Now let's connect to your LG TV."
     echo ""
-    warn "Dev mode sessions expire every ~50 hours and must be renewed!"
+    echo "  Make sure on your TV:"
+    echo "    - Developer Mode app is open"
+    echo "    - Dev Mode is ON"
+    echo "    - Key Server is ON"
+    echo "    - Note the IP address and passphrase shown"
+    echo ""
+
+    read -rp "Enter your LG TV's IP address (e.g. 192.168.1.100): " TV_IP
+    read -rp "Enter a name for this device [lgtv]: " TV_NAME
+    TV_NAME="${TV_NAME:-lgtv}"
+
+    info "Adding TV device '$TV_NAME' at $TV_IP..."
+    ares-setup-device --add "$TV_NAME" --info "{\"host\":\"$TV_IP\",\"port\":\"9922\",\"username\":\"prisoner\"}"
+
+    echo ""
+    info "Getting device key (enter the passphrase from Developer Mode app)..."
+    ares-novacom --device "$TV_NAME" --getkey
+
+    # Verify connection
+    echo ""
+    info "Verifying connection to TV..."
+    if ares-device-info --device "$TV_NAME" 2>/dev/null; then
+        success "Connected to LG TV!"
+    else
+        fail "Could not connect to TV. Check IP and that Dev Mode + Key Server are ON."
+        return 1
+    fi
+
+    # 1d: Download and install Homebrew Channel
+    echo ""
+    info "Downloading latest Homebrew Channel .ipk..."
+    HBC_URL="https://github.com/nicoquinterosc/Homebrew-channel-/releases/latest/download/org.nicoquinterosc.homebrewchannel_0.7.2_all.ipk"
+    HBC_IPK="/tmp/homebrew-channel.ipk"
+
+    # Try to get the actual latest from webosbrew releases
+    WEBOSBREW_URL=$(curl -sL "https://api.github.com/repos/nicoquinterosc/Homebrew-channel-/releases/latest" 2>/dev/null \
+        | grep -o '"browser_download_url": "[^"]*\.ipk"' | head -1 | cut -d'"' -f4) || true
+
+    if [[ -n "$WEBOSBREW_URL" ]]; then
+        curl -L -o "$HBC_IPK" "$WEBOSBREW_URL"
+    else
+        # Fallback: download from webosbrew repo page
+        info "Trying webosbrew.org release..."
+        curl -L -o "$HBC_IPK" "https://github.com/nicoquinterosc/Homebrew-channel-/releases/download/v0.7.2/org.nicoquinterosc.homebrewchannel_0.7.2_all.ipk" 2>/dev/null || {
+            fail "Could not download Homebrew Channel .ipk automatically."
+            echo ""
+            echo "  Download it manually from:"
+            echo "    https://github.com/nicoquinterosc/Homebrew-channel-/releases"
+            echo "  Then install with:"
+            echo "    ares-install --device $TV_NAME /path/to/file.ipk"
+            return 1
+        }
+    fi
+
+    info "Installing Homebrew Channel on TV..."
+    ares-install --device "$TV_NAME" "$HBC_IPK"
+
+    success "Homebrew Channel installed on your LG TV!"
+    echo ""
+    echo "  Open Homebrew Channel on your TV to browse and install apps."
+    echo ""
+    warn "Developer Mode expires every 1000 hours."
+    warn "Open the Developer Mode app on your TV and click 'Extend' before it expires."
+    rm -f "$HBC_IPK"
 }
 
 # ---------------------------------------------------------------------------
-# Step 3: VS Code
+# Step 2: VS Code
 # ---------------------------------------------------------------------------
 install_vscode() {
     echo ""
     echo "----------------------------------------------"
-    info "Step 3/4: Installing Visual Studio Code"
+    info "Step 2/3: Installing Visual Studio Code"
     echo "----------------------------------------------"
 
     if command -v code &>/dev/null; then
@@ -199,13 +198,13 @@ install_vscode() {
     fi
 
     info "Adding Microsoft apt repository..."
-    run "wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/packages.microsoft.gpg"
-    run "$SUDO install -D -o root -g root -m 644 /tmp/packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg"
-    run "echo 'deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main' | $SUDO tee /etc/apt/sources.list.d/vscode.list > /dev/null"
+    wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/packages.microsoft.gpg
+    $SUDO install -D -o root -g root -m 644 /tmp/packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg
+    echo "deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" | $SUDO tee /etc/apt/sources.list.d/vscode.list > /dev/null
 
     info "Installing VS Code..."
-    run "$SUDO apt-get update -qq && $SUDO apt-get install -y -qq code"
-    run "rm -f /tmp/packages.microsoft.gpg"
+    $SUDO apt-get update -qq && $SUDO apt-get install -y -qq code
+    rm -f /tmp/packages.microsoft.gpg
 
     if command -v code &>/dev/null; then
         success "VS Code installed: $(code --version 2>/dev/null | head -1)"
@@ -215,21 +214,21 @@ install_vscode() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 4: Claude Code
+# Step 3: Claude Code
 # ---------------------------------------------------------------------------
 install_claude_code() {
     echo ""
     echo "----------------------------------------------"
-    info "Step 4/4: Installing Claude Code (latest from npm)"
+    info "Step 3/3: Installing Claude Code (latest)"
     echo "----------------------------------------------"
 
-    if command -v claude &>/dev/null; then
-        success "Claude Code is already installed: $(claude --version 2>/dev/null || echo 'version unknown')"
-        info "Updating to latest version..."
+    if ! command -v node &>/dev/null; then
+        warn "Node.js not found. Installing via apt..."
+        $SUDO apt-get update -qq && $SUDO apt-get install -y -qq nodejs npm
     fi
 
     info "Installing @anthropic-ai/claude-code@latest via npm..."
-    run "$SUDO npm install -g @anthropic-ai/claude-code@latest"
+    $SUDO npm install -g @anthropic-ai/claude-code@latest
 
     if command -v claude &>/dev/null; then
         success "Claude Code installed: $(claude --version 2>/dev/null || echo 'installed')"
@@ -239,12 +238,11 @@ install_claude_code() {
 }
 
 # ---------------------------------------------------------------------------
-# Run steps
+# Run
 # ---------------------------------------------------------------------------
-should_run 1 && install_homebrew
-should_run 2 && install_webos_cli
-should_run 3 && install_vscode
-should_run 4 && install_claude_code
+should_run 1 && install_homebrew_channel
+should_run 2 && install_vscode
+should_run 3 && install_claude_code
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -264,16 +262,10 @@ check_tool() {
     fi
 }
 
-check_tool "Homebrew"        "brew"
-check_tool "webOS TV CLI"    "ares"
+check_tool "webOS TV CLI"    "ares-install"
 check_tool "VS Code"         "code"
 check_tool "Claude Code"     "claude"
 
 echo ""
-if $DRY_RUN; then
-    warn "This was a dry run. Re-run without --dry-run to install."
-else
-    success "Setup complete! You may need to restart your shell or run:"
-    echo "  source ~/.bashrc"
-fi
+success "Done! Restart your shell or run: source ~/.bashrc"
 echo ""
