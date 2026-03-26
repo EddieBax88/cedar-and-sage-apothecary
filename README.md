@@ -4,9 +4,13 @@ Cedar and Sage Studios: Apothecary Line. Premium, nature-inspired loungewear.
 ## Development Environment Setup
 
 ### Prerequisites
-- Ubuntu 24.04 LTS (or compatible Debian-based distro)
-- Node.js v18+ and npm (v22 recommended)
+- Ubuntu 24.04 LTS (or compatible Debian-based distro, including Chromebook Crostini)
+- Node.js v18+ and npm (v22 recommended) -- script will attempt to install if missing
 - Git, curl, wget
+- **Chromebook users:** You need a sudo password set. If you've never set one, run:
+  ```bash
+  sudo passwd $(whoami)
+  ```
 
 ### Quick Start
 

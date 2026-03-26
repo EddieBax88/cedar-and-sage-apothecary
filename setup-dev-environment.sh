@@ -4,7 +4,7 @@
 # Cedar and Sage Studios - Development Environment Setup
 #
 # Installs: Homebrew, LG webOS TV CLI, VS Code, Claude Code
-# Tested on: Ubuntu 24.04 LTS (x86_64)
+# Tested on: Ubuntu 24.04 LTS (x86_64), Chromebook Crostini (Debian/Ubuntu)
 #
 # Usage:
 #   ./setup-dev-environment.sh              # Run full setup
@@ -83,6 +83,19 @@ if $DRY_RUN; then
     echo ""
 fi
 
+# Detect if running as root or need sudo
+if [[ "$(id -u)" -eq 0 ]]; then
+    SUDO=""
+else
+    SUDO="sudo"
+    info "Running as user '$(whoami)' - will use sudo for system commands"
+    # Verify sudo works before proceeding
+    if ! $SUDO -v 2>/dev/null; then
+        fail "sudo access required. Run: sudo passwd \$(whoami) to set a password first."
+        exit 1
+    fi
+fi
+
 # ---------------------------------------------------------------------------
 # Step 1: Homebrew (Linuxbrew)
 # ---------------------------------------------------------------------------
@@ -99,7 +112,7 @@ install_homebrew() {
     fi
 
     info "Installing prerequisites..."
-    run "apt-get update -qq && apt-get install -y -qq build-essential procps curl file git"
+    run "$SUDO apt-get update -qq && $SUDO apt-get install -y -qq build-essential procps curl file git"
 
     info "Running Homebrew installer (non-interactive)..."
     run "NONINTERACTIVE=1 /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
@@ -134,8 +147,12 @@ install_webos_cli() {
     echo "----------------------------------------------"
 
     if ! command -v node &>/dev/null; then
-        fail "Node.js is required but not found. Please install Node.js first."
-        return 1
+        warn "Node.js is required but not found. Attempting to install via apt..."
+        run "$SUDO apt-get update -qq && $SUDO apt-get install -y -qq nodejs npm"
+        if ! command -v node &>/dev/null; then
+            fail "Node.js installation failed. Install Node.js manually, then re-run."
+            return 1
+        fi
     fi
 
     if command -v ares &>/dev/null; then
@@ -183,11 +200,11 @@ install_vscode() {
 
     info "Adding Microsoft apt repository..."
     run "wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /tmp/packages.microsoft.gpg"
-    run "install -D -o root -g root -m 644 /tmp/packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg"
-    run "echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main' | tee /etc/apt/sources.list.d/vscode.list > /dev/null"
+    run "$SUDO install -D -o root -g root -m 644 /tmp/packages.microsoft.gpg /etc/apt/keyrings/packages.microsoft.gpg"
+    run "echo 'deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main' | $SUDO tee /etc/apt/sources.list.d/vscode.list > /dev/null"
 
     info "Installing VS Code..."
-    run "apt-get update -qq && apt-get install -y -qq code"
+    run "$SUDO apt-get update -qq && $SUDO apt-get install -y -qq code"
     run "rm -f /tmp/packages.microsoft.gpg"
 
     if command -v code &>/dev/null; then
